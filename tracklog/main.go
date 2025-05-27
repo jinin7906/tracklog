@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config/config.yaml", "설정 파일 경로")
+	configPath := flag.String("config", "config/config.yaml", "config file path")
 	flag.Parse()
 
 	//read config
