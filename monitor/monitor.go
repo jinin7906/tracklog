@@ -6,12 +6,19 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"tracklog/config"
+	"tracklog/tcp_client"
 
 	"github.com/fsnotify/fsnotify"
 )
+
+type MonitorMgr struct {
+	IsRun     bool
+	GlobalCfg config.GlobalConfig
+}
 
 type LogLine struct {
 	MonitorName string
@@ -19,8 +26,20 @@ type LogLine struct {
 	Timestamp   time.Time
 }
 
+func NewMonitorMgr(_glovalCfg *config.GlobalConfig) *MonitorMgr {
+	var mng *MonitorMgr = new(MonitorMgr)
+	mng.IsRun = false
+	mng.GlobalCfg = *_glovalCfg
+	return mng
+}
+
+func (This *MonitorMgr) Start() bool {
+
+	return true
+}
+
 // log file monitor
-func LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine) {
+func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine) {
 	fmt.Printf("[%s] log monitor start: %s/%s\n", cfg.Name, cfg.Path, cfg.FilenamePattern)
 
 	filePath := filepath.Join(cfg.Path, cfg.FilenamePattern)
@@ -54,7 +73,7 @@ func LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine) {
 
 	// last update time check - 행 걸린 여부 체크
 	lastUpdateTime := time.Now()
-	noUpdateCheckInterval := 10 * time.Second // check time
+	noUpdateCheckInterval := 10 * time.Second // 10sec 고정
 
 	ticker := time.NewTicker(noUpdateCheckInterval)
 	defer ticker.Stop()
@@ -93,8 +112,9 @@ func LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine) {
 			fmt.Printf("[%s] watcher err: %v\n", cfg.Name, err)
 		case <-ticker.C:
 			// check log event
-			if cfg.EventOnNoUpdate && time.Since(lastUpdateTime) > 30*time.Second { // 타임아웃 시간도 옵션으로 빼야겠다
-				fmt.Printf("[%s] time out log event\n", cfg.Name)
+			if cfg.LogWriteSec > 0 && time.Since(lastUpdateTime) > time.Duration(cfg.LogWriteSec)*time.Second {
+				processedContentForTCP := strings.TrimRight("추가로그 작성 없음", "\n\r")
+				tcp_client.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", cfg.Name, processedContentForTCP))
 			}
 		}
 	}

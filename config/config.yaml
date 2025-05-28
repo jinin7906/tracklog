@@ -9,6 +9,7 @@ global:
   event_tcp_address: "127.0.0.1:9000" # 이벤트 전송할 TCP 주소.
   default_compress: false # 기본 저장 파일 압축 여부.
   default_save_path: "/tmp/tracklog_output" # 추출 로그 기본 저장 경로.
+  log_time_msg_regex: "^\\[?\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\]?" # 저장 로그에서 로그 작성 시간이 없디면 추가 하는 정규식
 
 # monitors
 monitors:
@@ -21,5 +22,5 @@ monitors:
     save_path: "/tmp/tracklog_output/test.log" # 추출 로그 저장 경로.
     compress_output: false # 추출 로그 압축 여부.
     realtime: true # 실시간 감시 여부.
-    event_on_no_update: true # 로그 업데이트 없으면 이벤트 발생 여부.
+    log_write_sec: 1 # 로그 업데이트 없으면 이벤트 발생 여부. (polling interval 10초 고정)
     event_tcp_enabled: true # TCP 이벤트 전송 여부.

@@ -2,7 +2,6 @@ package processor
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,9 +10,8 @@ import (
 
 	"tracklog/config"
 	"tracklog/monitor"
+	"tracklog/tcp_client"
 )
-
-var timestampRegex = regexp.MustCompile(`^\[?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]?`) // 이거도 옵션처리 해야함
 
 // log line recv process
 func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitorCfgs []config.MonitorConfig) {
@@ -73,7 +71,8 @@ func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitor
 
 			// log time content check
 			finalLogLine := ""
-			if timestampRegex.MatchString(processedContent) {
+
+			if regexp.MustCompile(globalCfg.LogTimeMsgRegex).MatchString(processedContent) {
 				finalLogLine = processedContent
 			} else {
 				finalLogLine = fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), processedContent)
@@ -90,7 +89,7 @@ func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitor
 		// tcp send
 		if globalCfg.EventTCPEnabled && currentMonitorCfg.EventTCPEnabled {
 			processedContentForTCP := strings.TrimRight(extractedContent, "\n\r")
-			sendViaTCP(globalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", currentMonitorCfg.Name, processedContentForTCP))
+			tcp_client.SendLogToTCP(globalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", currentMonitorCfg.Name, processedContentForTCP))
 		}
 	} else {
 		// 매칭실패
@@ -115,21 +114,4 @@ func appendToFile(filePath, content string) error {
 		return fmt.Errorf("tracklog file write err: %s: %w", filePath, err)
 	}
 	return nil
-}
-
-// tcp send
-func sendViaTCP(address, data string) {
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		fmt.Printf("tcp connect err %s: %v\n", address, err)
-		return
-	}
-	defer conn.Close()
-
-	_, err = conn.Write([]byte(data + "\n"))
-	if err != nil {
-		fmt.Printf("tcp send err %s: %v\n", address, err)
-	} else {
-		// tcp send ok
-	}
 }

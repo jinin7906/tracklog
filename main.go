@@ -11,7 +11,15 @@ import (
 	"tracklog/processor"
 )
 
+type MainThis struct {
+	// ... 기존 필드들 ...
+	MonitorMgr *monitor.MonitorMgr // <-- 이 필드를 추가합니다.
+}
+
 func main() {
+
+	MainThis := new(MainThis)
+
 	configPath := flag.String("config", "config/config.yaml", "config file path")
 	flag.Parse()
 
@@ -32,7 +40,8 @@ func main() {
 		wg.Add(1)
 		go func(mCfg config.MonitorConfig) {
 			defer wg.Done()
-			monitor.LogMonitor(mCfg, logLineChan)
+			//MainThis.MonitorMgr.GlobalCfg = cfg.Global // 여기 new 호출하는걸로 바꿔야함
+			MainThis.MonitorMgr.LogMonitor(mCfg, logLineChan)
 		}(monCfg)
 	}
 

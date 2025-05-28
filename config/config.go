@@ -16,6 +16,7 @@ type GlobalConfig struct {
 	EventTCPAddress string `yaml:"event_tcp_address"`
 	DefaultCompress bool   `yaml:"default_compress"`
 	DefaultSavePath string `yaml:"default_save_path"`
+	LogTimeMsgRegex string `yaml:"log_time_msg_regex"`
 }
 
 // monitor config
@@ -29,8 +30,9 @@ type MonitorConfig struct {
 	SavePath        string `yaml:"save_path"`
 	CompressOutput  bool   `yaml:"compress_output"`
 	Realtime        bool   `yaml:"realtime"`
-	EventOnNoUpdate bool   `yaml:"event_on_no_update"` // 행 걸림 감지
-	EventTCPEnabled bool   `yaml:"event_tcp_enabled"`
+	//EventOnNoUpdate bool   `yaml:"event_on_no_update"` // 행 걸림 감지
+	LogWriteSec     int  `yaml:"log_write_sec"` // 감시 파일 로그 작성 여부 확인(0 = 사용안함)
+	EventTCPEnabled bool `yaml:"event_tcp_enabled"`
 }
 
 type Config struct {
@@ -42,13 +44,13 @@ type Config struct {
 func LoadConfig(configPath string) (*Config, error) {
 	data, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("설정 파일 읽기 실패: %w", err)
+		return nil, fmt.Errorf("config read fail: %w", err)
 	}
 
 	var cfg Config
 	err = yaml.Unmarshal(data, &cfg)
 	if err != nil {
-		return nil, fmt.Errorf("YAML 파싱 실패: %w", err)
+		return nil, fmt.Errorf("yaml read fail: %w", err)
 	}
 
 	return &cfg, nil
