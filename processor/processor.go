@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"tracklog/config"
@@ -13,11 +14,63 @@ import (
 	"tracklog/tcp_client"
 )
 
+type ProcessMgr struct {
+	IsRun     bool
+	GlobalCfg config.GlobalConfig
+	MonCfgs   []config.MonitorConfig
+}
+
+// type LogLine struct {
+// 	MonitorName string
+// 	Content     string
+// 	Timestamp   time.Time
+// }
+
+func NewProcessMgr(_glovalCfg *config.GlobalConfig, monCfgs *[]config.MonitorConfig) *ProcessMgr {
+	var mng *ProcessMgr = new(ProcessMgr)
+	mng.IsRun = false
+
+	if _glovalCfg != nil {
+		mng.GlobalCfg = *_glovalCfg
+	} else {
+		fmt.Println("[ProcessMgr] NewMonitorMgr: _glovalCfg is nil. Using default/empty GlobalConfig.")
+	}
+
+	if monCfgs != nil {
+		mng.MonCfgs = *monCfgs
+	} else {
+		fmt.Println("[ProcessMgr] NewMonitorMgr: _glovalCfg is nil. Using default/empty GlobalConfig.")
+	}
+
+	return mng
+}
+
+func (This *ProcessMgr) Start(lineChan chan monitor.LogLine, wg *sync.WaitGroup) bool {
+
+	//var wg sync.WaitGroup
+	This.IsRun = true
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for logLine := range lineChan {
+			This.ProcessLogLine(logLine)
+		}
+		fmt.Println("log chan stop.")
+	}()
+	return true
+}
+
 // log line recv process
-func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitorCfgs []config.MonitorConfig) {
+func (This *ProcessMgr) ProcessLogLine(line monitor.LogLine) {
+
+	if This.IsRun == false {
+		return
+	}
+
 	// find monitor config
 	var currentMonitorCfg *config.MonitorConfig
-	for _, cfg := range monitorCfgs {
+	for _, cfg := range This.MonCfgs {
 		if cfg.Name == line.MonitorName {
 			currentMonitorCfg = &cfg
 			break
@@ -64,7 +117,7 @@ func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitor
 		if currentMonitorCfg.SaveExtracted {
 			savePath := currentMonitorCfg.SavePath
 			if savePath == "" {
-				savePath = globalCfg.DefaultSavePath + "/" + currentMonitorCfg.Name + "_extracted.log"
+				savePath = This.GlobalCfg.DefaultSavePath + "/" + currentMonitorCfg.Name + "_extracted.log"
 			}
 
 			processedContent := strings.TrimRight(extractedContent, "\n\r")
@@ -72,7 +125,7 @@ func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitor
 			// log time content check
 			finalLogLine := ""
 
-			if regexp.MustCompile(globalCfg.LogTimeMsgRegex).MatchString(processedContent) {
+			if regexp.MustCompile(This.GlobalCfg.LogTimeMsgRegex).MatchString(processedContent) {
 				finalLogLine = processedContent
 			} else {
 				finalLogLine = fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), processedContent)
@@ -87,9 +140,9 @@ func ProcessLogLine(line monitor.LogLine, globalCfg config.GlobalConfig, monitor
 		}
 
 		// tcp send
-		if globalCfg.EventTCPEnabled && currentMonitorCfg.EventTCPEnabled {
+		if This.GlobalCfg.EventTCPEnabled && currentMonitorCfg.EventTCPEnabled {
 			processedContentForTCP := strings.TrimRight(extractedContent, "\n\r")
-			tcp_client.SendLogToTCP(globalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", currentMonitorCfg.Name, processedContentForTCP))
+			tcp_client.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", currentMonitorCfg.Name, processedContentForTCP))
 		}
 	} else {
 		// 매칭실패

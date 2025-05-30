@@ -30,9 +30,8 @@ type MonitorConfig struct {
 	SavePath        string `yaml:"save_path"`
 	CompressOutput  bool   `yaml:"compress_output"`
 	Realtime        bool   `yaml:"realtime"`
-	//EventOnNoUpdate bool   `yaml:"event_on_no_update"` // 행 걸림 감지
-	LogWriteSec     int  `yaml:"log_write_sec"` // 감시 파일 로그 작성 여부 확인(0 = 사용안함)
-	EventTCPEnabled bool `yaml:"event_tcp_enabled"`
+	LogWriteSec     int    `yaml:"log_write_sec"` // 감시 파일 로그 작성 여부 확인(0 = 사용안함)
+	EventTCPEnabled bool   `yaml:"event_tcp_enabled"`
 }
 
 type Config struct {

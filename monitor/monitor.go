@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"tracklog/config"
@@ -29,17 +30,32 @@ type LogLine struct {
 func NewMonitorMgr(_glovalCfg *config.GlobalConfig) *MonitorMgr {
 	var mng *MonitorMgr = new(MonitorMgr)
 	mng.IsRun = false
-	mng.GlobalCfg = *_glovalCfg
+
+	if _glovalCfg != nil {
+		mng.GlobalCfg = *_glovalCfg
+	} else {
+		fmt.Println("[MonitorMgr] NewMonitorMgr: _glovalCfg is nil. Using default/empty GlobalConfig.")
+	}
 	return mng
 }
 
-func (This *MonitorMgr) Start() bool {
+func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- LogLine, wg *sync.WaitGroup) bool {
+
+	//var wg sync.WaitGroup
+
+	for _, monCfg := range *monCfgs {
+		wg.Add(1)
+		go This.LogMonitor(monCfg, lineChan, wg)
+	}
 
 	return true
 }
 
 // log file monitor
-func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine) {
+func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
 	fmt.Printf("[%s] log monitor start: %s/%s\n", cfg.Name, cfg.Path, cfg.FilenamePattern)
 
 	filePath := filepath.Join(cfg.Path, cfg.FilenamePattern)
@@ -114,7 +130,13 @@ func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- Log
 			// check log event
 			if cfg.LogWriteSec > 0 && time.Since(lastUpdateTime) > time.Duration(cfg.LogWriteSec)*time.Second {
 				processedContentForTCP := strings.TrimRight("추가로그 작성 없음", "\n\r")
-				tcp_client.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", cfg.Name, processedContentForTCP))
+				err := tcp_client.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", cfg.Name, processedContentForTCP))
+
+				if err != nil {
+					fmt.Printf("TCP 로그 전송 중 오류 발생: %v\n", err)
+				} else {
+					fmt.Println("TCP 로그 전송 성공.")
+				}
 			}
 		}
 	}
