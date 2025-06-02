@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"tracklog/config"
-	"tracklog/tcp_client"
+	"tracklog/manager"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -19,29 +19,32 @@ import (
 type MonitorMgr struct {
 	IsRun     bool
 	GlobalCfg config.GlobalConfig
+
+	DataMgr *manager.Mgr
 }
 
-type LogLine struct {
-	MonitorName string
-	Content     string
-	Timestamp   time.Time
-}
-
-func NewMonitorMgr(_glovalCfg *config.GlobalConfig) *MonitorMgr {
+func NewMonitorMgr(datamgr *manager.Mgr, _glovalCfg *config.GlobalConfig) *MonitorMgr {
 	var mng *MonitorMgr = new(MonitorMgr)
 	mng.IsRun = false
 
 	if _glovalCfg != nil {
 		mng.GlobalCfg = *_glovalCfg
 	} else {
-		fmt.Println("[MonitorMgr] NewMonitorMgr: _glovalCfg is nil. Using default/empty GlobalConfig.")
+		fmt.Println("[MonitorMgr] NewMonitorMgr: _glovalCfg is nil")
+		return nil
 	}
+
+	if datamgr != nil {
+		mng.DataMgr = datamgr
+	} else {
+		fmt.Println("[MonitorMgr] NewMonitorMgr: datamgr is nil")
+		return nil
+	}
+
 	return mng
 }
 
-func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- LogLine, wg *sync.WaitGroup) bool {
-
-	//var wg sync.WaitGroup
+func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- manager.LogLine, wg *sync.WaitGroup) bool {
 
 	for _, monCfg := range *monCfgs {
 		wg.Add(1)
@@ -52,7 +55,7 @@ func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- L
 }
 
 // log file monitor
-func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- LogLine, wg *sync.WaitGroup) {
+func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- manager.LogLine, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -113,7 +116,7 @@ func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- Log
 						break
 					}
 					// write log line event send
-					lineChan <- LogLine{
+					lineChan <- manager.LogLine{
 						MonitorName: cfg.Name,
 						Content:     line,
 						Timestamp:   time.Now(),
@@ -130,7 +133,7 @@ func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- Log
 			// check log event
 			if cfg.LogWriteSec > 0 && time.Since(lastUpdateTime) > time.Duration(cfg.LogWriteSec)*time.Second {
 				processedContentForTCP := strings.TrimRight("추가로그 작성 없음", "\n\r")
-				err := tcp_client.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", cfg.Name, processedContentForTCP))
+				err := This.DataMgr.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", cfg.Name, processedContentForTCP))
 
 				if err != nil {
 					fmt.Printf("TCP 로그 전송 중 오류 발생: %v\n", err)

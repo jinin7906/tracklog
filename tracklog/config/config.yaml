@@ -13,13 +13,13 @@ global:
 
 # monitors
 monitors:
-  - name: "tracklog_test" # 이 감시 설정의 고유 이름. (key)
+  - name: "tl" # 이 감시 설정의 고유 이름. (key)
     path: "/tmp" # 로그 파일 디렉토리 경로.
-    filename_pattern: "tracklog_test.log" # 감시할 로그 파일명. (파일 이름도 나중엔 정규식 + 배열처리 해야겠다)
+    filename_pattern: "tracklog_test*" # 감시할 로그 파일명. (?, * 와일드 카드로 파일 전체 모니터링 가능)
     extract_type: "regex" # 추출 방식 (regex 또는 plain).
     extract_pattern: "(INFO|Warning|ERROR)" # 추출 패턴 (정규식 또는 문자열).
     save_extracted: true # 추출된 로그 저장 여부.
-    save_path: "/tmp/tracklog_output/test.log" # 추출 로그 저장 경로.
+    save_path: "/tmp/tracklog_output" # 추출 로그 저장 디렉터리.
     compress_output: false # 추출 로그 압축 여부.
     realtime: true # 실시간 감시 여부.
     log_write_sec: 1 # 로그 업데이트 없으면 이벤트 발생 여부. (polling interval 10초 고정)

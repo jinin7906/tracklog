@@ -10,14 +10,15 @@ import (
 	"time"
 
 	"tracklog/config"
-	"tracklog/monitor"
-	"tracklog/tcp_client"
+	"tracklog/manager"
 )
 
 type ProcessMgr struct {
 	IsRun     bool
 	GlobalCfg config.GlobalConfig
 	MonCfgs   []config.MonitorConfig
+
+	DataMgr *manager.Mgr
 }
 
 // type LogLine struct {
@@ -26,26 +27,35 @@ type ProcessMgr struct {
 // 	Timestamp   time.Time
 // }
 
-func NewProcessMgr(_glovalCfg *config.GlobalConfig, monCfgs *[]config.MonitorConfig) *ProcessMgr {
+func NewProcessMgr(datamgr *manager.Mgr, _glovalCfg *config.GlobalConfig, monCfgs *[]config.MonitorConfig) *ProcessMgr {
 	var mng *ProcessMgr = new(ProcessMgr)
 	mng.IsRun = false
 
 	if _glovalCfg != nil {
 		mng.GlobalCfg = *_glovalCfg
 	} else {
-		fmt.Println("[ProcessMgr] NewMonitorMgr: _glovalCfg is nil. Using default/empty GlobalConfig.")
+		fmt.Println("[ProcessMgr] ProcessMgr: _glovalCfg is nil")
+		return nil
 	}
 
 	if monCfgs != nil {
 		mng.MonCfgs = *monCfgs
 	} else {
-		fmt.Println("[ProcessMgr] NewMonitorMgr: _glovalCfg is nil. Using default/empty GlobalConfig.")
+		fmt.Println("[ProcessMgr] ProcessMgr: monCfgs is nil")
+		return nil
+	}
+
+	if datamgr != nil {
+		mng.DataMgr = datamgr
+	} else {
+		fmt.Println("[ProcessMgr] ProcessMgr: datamgr is nil")
+		return nil
 	}
 
 	return mng
 }
 
-func (This *ProcessMgr) Start(lineChan chan monitor.LogLine, wg *sync.WaitGroup) bool {
+func (This *ProcessMgr) Start(lineChan chan manager.LogLine, wg *sync.WaitGroup) bool {
 
 	//var wg sync.WaitGroup
 	This.IsRun = true
@@ -61,12 +71,18 @@ func (This *ProcessMgr) Start(lineChan chan monitor.LogLine, wg *sync.WaitGroup)
 	return true
 }
 
-// log line recv process
-func (This *ProcessMgr) ProcessLogLine(line monitor.LogLine) {
+func (This *ProcessMgr) Stop() bool {
+	This.IsRun = false
 
-	if This.IsRun == false {
-		return
-	}
+	return true
+}
+
+// log line recv process
+func (This *ProcessMgr) ProcessLogLine(line manager.LogLine) {
+
+	// if This.IsRun == false {
+	// 	return
+	// }
 
 	// find monitor config
 	var currentMonitorCfg *config.MonitorConfig
@@ -82,7 +98,6 @@ func (This *ProcessMgr) ProcessLogLine(line monitor.LogLine) {
 		return
 	}
 
-	var extractedContent string
 	isMatched := false
 
 	//regex
@@ -94,33 +109,25 @@ func (This *ProcessMgr) ProcessLogLine(line monitor.LogLine) {
 		}
 		if re.MatchString(line.Content) {
 			isMatched = true
-			//치환할 문자도 옵션처리 할까?
-			//matches := re.FindStringSubmatch(line.Content)
-			// if len(matches) > 1 {
-			// 	extractedContent = strings.Join(matches[1:], " | ")
-			// } else {
-			// 	extractedContent = matches[0]
-			// }
-			extractedContent = line.Content
 		}
 	} else if currentMonitorCfg.ExtractType == "plain" {
 		if strings.Contains(line.Content, currentMonitorCfg.ExtractPattern) {
 			isMatched = true
-			extractedContent = line.Content
 		}
 	}
 
 	if isMatched {
-		fmt.Printf("[%s] extract log: %s\n", currentMonitorCfg.Name, extractedContent)
+		fmt.Printf("[%s] extract log: %s\n", currentMonitorCfg.Name, line.Content)
 
 		// extract save log
 		if currentMonitorCfg.SaveExtracted {
-			savePath := currentMonitorCfg.SavePath
+			//savePath := currentMonitorCfg.SavePath
+			savePath := fmt.Sprintf("%s/%s.log", currentMonitorCfg.SavePath, currentMonitorCfg.Name)
 			if savePath == "" {
 				savePath = This.GlobalCfg.DefaultSavePath + "/" + currentMonitorCfg.Name + "_extracted.log"
 			}
 
-			processedContent := strings.TrimRight(extractedContent, "\n\r")
+			processedContent := strings.TrimRight(line.Content, "\n\r")
 
 			// log time content check
 			finalLogLine := ""
@@ -141,8 +148,8 @@ func (This *ProcessMgr) ProcessLogLine(line monitor.LogLine) {
 
 		// tcp send
 		if This.GlobalCfg.EventTCPEnabled && currentMonitorCfg.EventTCPEnabled {
-			processedContentForTCP := strings.TrimRight(extractedContent, "\n\r")
-			tcp_client.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", currentMonitorCfg.Name, processedContentForTCP))
+			processedContentForTCP := strings.TrimRight(line.Content, "\n\r")
+			This.DataMgr.SendLogToTCP(This.GlobalCfg.EventTCPAddress, fmt.Sprintf("[%s] Extracted: %s", currentMonitorCfg.Name, processedContentForTCP))
 		}
 	} else {
 		// 매칭실패
