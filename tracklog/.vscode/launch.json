@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Tracklog", // 실행 구성 이름 (원하는 대로 변경 가능)
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}", // <--- 이 부분을 수정!
+            "args": ["--config", "config/config.yaml"] // Tracklog 실행 시 필요한 인자 추가
+        }
+    ]
+}
