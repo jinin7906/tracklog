@@ -2,8 +2,6 @@ package processor
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -117,7 +115,7 @@ func (This *ProcessMgr) ProcessLogLine(line manager.LogLine) {
 	}
 
 	if isMatched {
-		fmt.Printf("[%s] extract log: %s\n", currentMonitorCfg.Name, line.Content)
+		//fmt.Printf("[%s] extract log: %s\n", currentMonitorCfg.Name, line.Content)
 
 		// extract save log
 		if currentMonitorCfg.SaveExtracted {
@@ -138,7 +136,7 @@ func (This *ProcessMgr) ProcessLogLine(line manager.LogLine) {
 				finalLogLine = fmt.Sprintf("[%s] %s", time.Now().Format("2006-01-02 15:04:05"), processedContent)
 			}
 
-			err := appendToFile(savePath, finalLogLine+"\n")
+			err := This.DataMgr.AppendToFile(savePath, finalLogLine+"\n")
 			if err != nil {
 				fmt.Printf("[%s] file save error: %v\n", currentMonitorCfg.Name, err)
 			} else {
@@ -154,24 +152,4 @@ func (This *ProcessMgr) ProcessLogLine(line manager.LogLine) {
 	} else {
 		// 매칭실패
 	}
-}
-
-// write tracklog
-func appendToFile(filePath, content string) error {
-	dir := filepath.Dir(filePath)
-
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		return fmt.Errorf("dir create err %s: %w", dir, err)
-	}
-
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("tracklog file open err: %s: %w", filePath, err)
-	}
-	defer f.Close()
-
-	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("tracklog file write err: %s: %w", filePath, err)
-	}
-	return nil
 }
