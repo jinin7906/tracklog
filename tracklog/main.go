@@ -2,7 +2,7 @@ package main
 
 //추가할 기능
 //디렉터리 단위 모니터링 기능 -> OK -> yyyy - mm - 파일명[hh].log 으로 경로 고정
-//tracklog 로그파일 압축
+//tracklog 로그파일 압축 -> 압축 로직 OK
 //cpu, memory 사용제한
 //실시간 처리 or 분기 처리 옵션
 
@@ -84,6 +84,8 @@ func main() {
 	// monitor to processor
 	var wg sync.WaitGroup
 	logLineChan := make(chan manager.LogLine, cfg.Global.MaxGoroutines*2)
+
+	MainThis.DataMgr.Start(&cfg.Monitors, &wg)
 
 	MainThis.MonitorMgr = monitor.NewMonitorMgr(MainThis.DataMgr, &cfg.Global)
 	MainThis.MonitorMgr.Start(&cfg.Monitors, logLineChan, &wg)
