@@ -6,6 +6,8 @@ package main
 //cpu, memory 사용제한
 //실시간 처리 or 분기 처리 옵션
 
+//프로세스 비정상 종료시 이어서 진행하는 방법이나 최초 실행시 처음부터 수집하는 방법도 생각 필요함 -> last line에다가 해당 파일을 체킹한 부분을 로그로 남기는 방식으로 하면 될거같긴함 다음꺼 이어서 쓸대 지우면되니까
+
 import (
 	"flag"
 	"fmt"
@@ -41,17 +43,6 @@ func main() {
 	fmt.Printf("config load succ - %d\n", len(cfg.Monitors))
 
 	MainThis.DataMgr = manager.NewMgr()
-
-	// for _, monCfg := range cfg.Monitors {
-	// 	fileArr, err := MainThis.DataMgr.GetMatchingFiles(monCfg.Path, monCfg.FilenamePattern)
-	// 	if err != nil {
-	// 		fmt.Printf("[MonitorMgr] Start - not find file")
-	// 	}
-	// 	tmpMonCfg := monCfg.Name
-	// 	for _, file := range fileArr {
-	// 		//여기서 배열에 추가하면 될거같은데
-	// 	}
-	// }
 
 	var expandedMonitors []config.MonitorConfig
 

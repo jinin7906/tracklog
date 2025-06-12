@@ -47,8 +47,15 @@ func NewMonitorMgr(datamgr *manager.Mgr, _glovalCfg *config.GlobalConfig) *Monit
 func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- manager.LogLine, wg *sync.WaitGroup) bool {
 
 	for _, monCfg := range *monCfgs {
-		wg.Add(1)
-		go This.LogMonitor(monCfg, lineChan, wg)
+		if monCfg.Realtime {
+			wg.Add(1)
+			go This.LogMonitor(monCfg, lineChan, wg)
+		} else {
+
+			/*여기서 분기 처리 코드 구현해야함 	( monCfg.FileCheckTime == int 옵션 사용 )
+			파일을 전체 검사할지, 마지막 시점으로 부터 검사할지 고민필요
+			*/
+		}
 	}
 
 	return true

@@ -138,11 +138,12 @@ func (This *Mgr) CreateDir(dirPath string) (bool, error) {
 
 //######################################################################### private
 
+// 압축 goroutine
 func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
-	fmt.Println("Starting file compression task. It will run once every day.")
+	fmt.Println("start file compression task. it will run once every day.")
 
 	for {
-		fmt.Printf("--- Starting file compression task: %s ---\n", time.Now().Format("2006-01-02 15:04:05"))
+		fmt.Printf("--- start file compression task: %s ---\n", time.Now().Format("2006-01-02 15:04:05"))
 
 		taskSuccess := true
 
@@ -170,7 +171,7 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 
 			files, err := ioutil.ReadDir(dirPath)
 			if err != nil {
-				fmt.Printf("[ERROR] Error reading directory %s: %v\n", dirPath, err)
+				fmt.Printf("[ERROR] error reading directory %s: %v\n", dirPath, err)
 				taskSuccess = false
 				continue
 			}
@@ -183,10 +184,8 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 				fileName := file.Name()
 				filePath := filepath.Join(dirPath, fileName)
 
-				// Ignore files with .tar.gz extension
-				// Changed from ".gz" to ".tar.gz" to reflect the new compression format.
 				if strings.HasSuffix(fileName, ".tar.gz") {
-					fmt.Printf("-> File %s is already compressed, ignoring.\n", fileName)
+					fmt.Printf("-> file %s is already compressed, ignoring.\n", fileName)
 					continue
 				}
 
@@ -199,7 +198,7 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 
 				nDay, err := strconv.Atoi(day)
 				if err != nil {
-					fmt.Printf("[WARN] Failed to convert current day '%s' to int: %v. Skipping file %s.\n", day, err, fileName)
+					fmt.Printf("[WARN] fail to convert current day '%s' to int: %v. skip file %s.\n", day, err, fileName)
 					continue
 				}
 
@@ -213,9 +212,8 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 				if diffDays > 3 {
 					//fmt.Printf("-> File %s (date: %s, %d days old) is older than 3 days. Initiating compression.\n", fileName, fileDate.Format("2006-01-02"), diffDays)
 
-					// Changed output file extension to .tar.gz
+					//tar.gz
 					compressedFilePath := filePath + ".tar.gz"
-					// Changed function call to the new .tar.gz compression function
 					err := compressFileTarGzip(filePath, compressedFilePath)
 					if err != nil {
 						fmt.Printf("[ERROR] Error compressing file %s: %v\n", fileName, err)
@@ -228,7 +226,7 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 						fmt.Printf("[ERROR] Error deleting original file %s: %v\n", fileName, err)
 						taskSuccess = false
 					} else {
-						fmt.Printf("-> Original file %s deleted. Compressed file: %s\n", fileName, compressedFilePath)
+						fmt.Printf("-> Original file %s delete. compressed file: %s\n", fileName, compressedFilePath)
 					}
 				} else {
 					//fmt.Printf("-> File %s (date: %s, %d days old) is not a compression target.\n", fileName, fileDate.Format("2006-01-02"), diffDays)
@@ -237,9 +235,9 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 		}
 
 		if taskSuccess {
-			fmt.Println("--- File compression task completed: SUCCESS ---")
+			fmt.Println("--- File compression task completed: succ ---")
 		} else {
-			fmt.Println("--- File compression task completed: WITH ERRORS ---")
+			fmt.Println("--- File compression task completed: error ---")
 		}
 
 		now := time.Now()
@@ -250,57 +248,48 @@ func (This *Mgr) compressFile(monCfgs *[]config.MonitorConfig) {
 		}
 
 		sleepDuration := nextRun.Sub(now)
-		fmt.Printf("Next compression task will run on %s. (Time remaining: %s)\n", nextRun.Format("2006-01-02 15:04:05"), sleepDuration.String())
+		fmt.Printf("next compression task will run on %s. (time remaining: %s)\n", nextRun.Format("2006-01-02 15:04:05"), sleepDuration.String())
 
 		time.Sleep(sleepDuration)
 	}
 }
 
-// Renamed and modified compressFileGzip to compressFileTarGzip.
-// This function now creates a tar.gz archive containing the source file.
+// 압축
 func compressFileTarGzip(srcPath, dstPath string) error {
-	// Create the output file for the .tar.gz archive
 	outputFile, err := os.Create(dstPath)
 	if err != nil {
 		return fmt.Errorf("failed to create compressed file: %w", err)
 	}
 	defer outputFile.Close()
 
-	// Create a Gzip writer on top of the output file
 	gzipWriter := gzip.NewWriter(outputFile)
 	defer gzipWriter.Close()
 
-	// Create a Tar writer on top of the Gzip writer
 	tarWriter := tar.NewWriter(gzipWriter)
 	defer tarWriter.Close()
 
-	// Get file info for the source file
 	fileInfo, err := os.Stat(srcPath)
 	if err != nil {
 		return fmt.Errorf("failed to get file info for %s: %w", srcPath, err)
 	}
 
-	// Create a tar header from the file info
 	header, err := tar.FileInfoHeader(fileInfo, "")
 	if err != nil {
 		return fmt.Errorf("failed to create tar header for %s: %w", srcPath, err)
 	}
-	// Set the Name in the header to be just the base file name
+
 	header.Name = filepath.Base(srcPath)
 
-	// Write the header to the tar archive
 	if err := tarWriter.WriteHeader(header); err != nil {
 		return fmt.Errorf("failed to write tar header for %s: %w", srcPath, err)
 	}
 
-	// Open the source file for reading its content
 	inputFile, err := os.Open(srcPath)
 	if err != nil {
 		return fmt.Errorf("failed to open source file %s: %w", srcPath, err)
 	}
 	defer inputFile.Close()
 
-	// Copy the content of the source file to the tar archive
 	if _, err := io.Copy(tarWriter, inputFile); err != nil {
 		return fmt.Errorf("failed to copy file content to tar archive for %s: %w", srcPath, err)
 	}

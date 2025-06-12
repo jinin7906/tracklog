@@ -22,5 +22,6 @@ monitors:
     save_path: "/tmp/tracklog_output" # 추출 로그 저장 디렉터리.
     compress_output: false # 추출 로그 압축 여부.
     realtime: true # 실시간 감시 여부.
+    filechecktime: 3600 # realtime 옵션을 false으로 사용하지 않을경우 주기에 한번씩 모니터링 (min)
     log_write_sec: 1 # 로그 업데이트 없으면 이벤트 발생 여부. (polling interval 10초 고정)
     event_tcp_enabled: true # TCP 이벤트 전송 여부.

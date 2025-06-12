@@ -30,6 +30,7 @@ type MonitorConfig struct {
 	SavePath        string `yaml:"save_path"`
 	CompressOutput  bool   `yaml:"compress_output"`
 	Realtime        bool   `yaml:"realtime"`
+	FileCheckTime   int    `yaml:"filechecktime"` // Realtime와 같이 사용
 	LogWriteSec     int    `yaml:"log_write_sec"` // 감시 파일 로그 작성 여부 확인(0 = 사용안함)
 	EventTCPEnabled bool   `yaml:"event_tcp_enabled"`
 }
