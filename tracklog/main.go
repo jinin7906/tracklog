@@ -4,9 +4,11 @@ package main
 //디렉터리 단위 모니터링 기능 -> OK -> yyyy - mm - 파일명[hh].log 으로 경로 고정
 //tracklog 로그파일 압축 -> 압축 로직 OK
 //cpu, memory 사용제한
-//실시간 처리 or 분기 처리 옵션
+//실시간 처리 or 분기 처리 옵션 -> monitor에서 분기 처리
 
-//프로세스 비정상 종료시 이어서 진행하는 방법이나 최초 실행시 처음부터 수집하는 방법도 생각 필요함 -> last line에다가 해당 파일을 체킹한 부분을 로그로 남기는 방식으로 하면 될거같긴함 다음꺼 이어서 쓸대 지우면되니까
+//추후에 DB 연동 옵션도 고려하자(퍼포먼스 잘나오는 성능좋은 DB찾아야함)
+//UI도 구현 할까?
+//프로세스 비정상 종료시 이어서 진행하는 방법이나 최초 실행시 처음부터 수집하는 방법도 생각 필요함 -> last line에다가 해당 파일을 체킹한 부분을 로그로 남기는 방식으로 하면 될거같긴함 다음꺼 이어서 쓸때 지우면되니까
 
 import (
 	"flag"
@@ -75,11 +77,12 @@ func main() {
 	// monitor to processor
 	var wg sync.WaitGroup
 	logLineChan := make(chan manager.LogLine, cfg.Global.MaxGoroutines*2)
+	logLineChanSch := make(chan manager.LogLine, cfg.Global.MaxGoroutines*2)
 
 	MainThis.DataMgr.Start(&cfg.Monitors, &wg)
 
 	MainThis.MonitorMgr = monitor.NewMonitorMgr(MainThis.DataMgr, &cfg.Global)
-	MainThis.MonitorMgr.Start(&cfg.Monitors, logLineChan, &wg)
+	MainThis.MonitorMgr.Start(&cfg.Monitors, logLineChan, logLineChanSch, &wg)
 
 	MainThis.ProcessorMgr = processor.NewProcessMgr(MainThis.DataMgr, &cfg.Global, &cfg.Monitors)
 	MainThis.ProcessorMgr.Start(logLineChan, &wg)

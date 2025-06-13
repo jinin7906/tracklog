@@ -44,12 +44,12 @@ func NewMonitorMgr(datamgr *manager.Mgr, _glovalCfg *config.GlobalConfig) *Monit
 	return mng
 }
 
-func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- manager.LogLine, wg *sync.WaitGroup) bool {
+func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- manager.LogLine, lineChanSch chan<- manager.LogLine, wg *sync.WaitGroup) bool {
 
 	for _, monCfg := range *monCfgs {
 		if monCfg.Realtime {
 			wg.Add(1)
-			go This.LogMonitor(monCfg, lineChan, wg)
+			go This.LogMonitorRealTime(monCfg, lineChan, wg)
 		} else {
 
 			/*여기서 분기 처리 코드 구현해야함 	( monCfg.FileCheckTime == int 옵션 사용 )
@@ -62,7 +62,7 @@ func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- m
 }
 
 // log file monitor
-func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- manager.LogLine, wg *sync.WaitGroup) {
+func (This *MonitorMgr) LogMonitorRealTime(cfg config.MonitorConfig, lineChan chan<- manager.LogLine, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
@@ -150,4 +150,8 @@ func (This *MonitorMgr) LogMonitor(cfg config.MonitorConfig, lineChan chan<- man
 			}
 		}
 	}
+}
+
+func (This *MonitorMgr) LogMonitorSchedule(cfg config.MonitorConfig, lineChanSch chan<- manager.LogLine, wg *sync.WaitGroup) {
+
 }

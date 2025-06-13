@@ -19,12 +19,6 @@ type ProcessMgr struct {
 	DataMgr *manager.Mgr
 }
 
-// type LogLine struct {
-// 	MonitorName string
-// 	Content     string
-// 	Timestamp   time.Time
-// }
-
 func NewProcessMgr(datamgr *manager.Mgr, _glovalCfg *config.GlobalConfig, monCfgs *[]config.MonitorConfig) *ProcessMgr {
 	var mng *ProcessMgr = new(ProcessMgr)
 	mng.IsRun = false
