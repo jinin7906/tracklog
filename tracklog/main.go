@@ -3,7 +3,7 @@ package main
 //추가할 기능
 //디렉터리 단위 모니터링 기능 -> OK -> yyyy - mm - 파일명[hh].log 으로 경로 고정
 //tracklog 로그파일 압축 -> 압축 로직 OK
-//cpu, memory 사용제한
+//cpu, memory 사용제한 -> 홀딩
 //실시간 처리 or 분기 처리 옵션 -> monitor에서 분기 처리
 
 //추후에 DB 연동 옵션도 고려하자(퍼포먼스 잘나오는 성능좋은 DB찾아야함)

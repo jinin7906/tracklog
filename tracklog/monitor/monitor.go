@@ -46,18 +46,25 @@ func NewMonitorMgr(datamgr *manager.Mgr, _glovalCfg *config.GlobalConfig) *Monit
 
 func (This *MonitorMgr) Start(monCfgs *[]config.MonitorConfig, lineChan chan<- manager.LogLine, lineChanSch chan<- manager.LogLine, wg *sync.WaitGroup) bool {
 
+	//monCfgsT := make([]config.MonitorConfig, 0)
+	monCfgsMap := make(map[time.Time]config.MonitorConfig)
+
 	for _, monCfg := range *monCfgs {
-		if monCfg.Realtime {
+		if monCfg.Realtime { // 실시간
 			wg.Add(1)
 			go This.LogMonitorRealTime(monCfg, lineChan, wg)
-		} else {
+		} else { // 스케줄
+			baseTime := time.Now()
+			scheduledTimeKey := baseTime.Add(time.Duration(monCfg.FileCheckTime) * time.Second)
+			monCfgsMap[scheduledTimeKey] = monCfg
 
-			/*여기서 분기 처리 코드 구현해야함 	( monCfg.FileCheckTime == int 옵션 사용 )
-			파일을 전체 검사할지, 마지막 시점으로 부터 검사할지 고민필요
-			*/
 		}
 	}
 
+	if len(monCfgsMap) != 0 {
+		wg.Add(1)
+		go This.LogMonitorSchedule(monCfgsMap, lineChan)
+	}
 	return true
 }
 
@@ -152,6 +159,107 @@ func (This *MonitorMgr) LogMonitorRealTime(cfg config.MonitorConfig, lineChan ch
 	}
 }
 
-func (This *MonitorMgr) LogMonitorSchedule(cfg config.MonitorConfig, lineChanSch chan<- manager.LogLine, wg *sync.WaitGroup) {
+func (This *MonitorMgr) LogMonitorSchedule(cfgMap map[time.Time]config.MonitorConfig, lineChanSch chan<- manager.LogLine) {
+	fmt.Println("Starting scheduled log monitor. It will check files periodically.")
 
+	//last line
+	fileOffsets := make(map[string]int64)
+
+	for {
+		currentTime := time.Now()
+
+		tasksToReschedule := make(map[time.Time]config.MonitorConfig)
+		tasksToRemove := []time.Time{}
+
+		for schTime, monCfg := range cfgMap {
+			if currentTime.After(schTime) || currentTime.Equal(schTime) {
+				fmt.Printf("--- Scheduled task ready for: %s (Scheduled at: %s) ---\n",
+					monCfg.Name, schTime.Format("2006-01-02 15:04:05"))
+
+				filePath := filepath.Join(monCfg.Path, monCfg.FilenamePattern)
+
+				currentOffset, exists := fileOffsets[filePath]
+				if !exists {
+					currentOffset = 0
+				}
+
+				file, err := os.OpenFile(filePath, os.O_RDONLY, 0660)
+				if err != nil {
+					fmt.Printf("[%s] Scheduled file open err: %v\n", monCfg.Name, err)
+					// 파일오픈 실패시 고려할게 필요함
+					continue
+				}
+
+				_, err = file.Seek(currentOffset, io.SeekStart)
+				if err != nil {
+					fmt.Printf("[%s] Scheduled file seek error to offset %d: %v\n", monCfg.Name, currentOffset, err)
+					file.Close()
+					continue
+				}
+
+				reader := bufio.NewReader(file)
+				newOffset := currentOffset
+
+				// 파일사이즈 변동시 처리 로직
+				fileStat, statErr := file.Stat()
+				if statErr != nil {
+					fmt.Printf("[%s] Error getting file stat for %s: %v\n", monCfg.Name, filePath, statErr)
+					file.Close()
+					continue
+				}
+
+				// 파일 변동시 처리 로직
+				if newOffset > fileStat.Size() {
+					fmt.Printf("  [%s] File %s truncated or recreated. Resetting offset from %d to 0.\n", monCfg.Name, filePath, newOffset)
+					newOffset = 0                               // 오프셋 리셋
+					_, err = file.Seek(newOffset, io.SeekStart) // 다시 처음부터 시크
+					if err != nil {
+						fmt.Printf("[%s] File seek error after reset: %v\n", monCfg.Name, err)
+						file.Close()
+						continue
+					}
+					reader = bufio.NewReader(file)
+				}
+
+				for {
+					line, err := reader.ReadString('\n')
+					if err != nil {
+						if err == io.EOF {
+							break
+						}
+						fmt.Printf("[%s] Scheduled file read error: %v\n", monCfg.Name, err)
+						break
+					}
+
+					lineChanSch <- manager.LogLine{
+						MonitorName: monCfg.Name,
+						Content:     line,
+						Timestamp:   time.Now(),
+					}
+					newOffset += int64(len(line))
+				}
+				file.Close()
+
+				//update offset
+				fileOffsets[filePath] = newOffset
+
+				//update sch time
+				nextScheduledTime := time.Now().Add(time.Duration(monCfg.FileCheckTime) * time.Second)
+				tasksToReschedule[nextScheduledTime] = monCfg
+				tasksToRemove = append(tasksToRemove, schTime) // 처리된 파일 update
+
+				fmt.Printf("  [%s] Task completed. Next scheduled at: %s (New offset: %d)\n",
+					monCfg.Name, nextScheduledTime.Format("2006-01-02 15:04:05"), newOffset)
+			}
+		}
+
+		for _, oldSchTime := range tasksToRemove {
+			delete(cfgMap, oldSchTime)
+		}
+		for newSchTime, newMonCfg := range tasksToReschedule {
+			cfgMap[newSchTime] = newMonCfg
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
 }

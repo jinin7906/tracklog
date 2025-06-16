@@ -60,6 +60,7 @@ func (This *ProcessMgr) Start(lineChan chan manager.LogLine, wg *sync.WaitGroup)
 		}
 		fmt.Println("log chan stop.")
 	}()
+
 	return true
 }
 
