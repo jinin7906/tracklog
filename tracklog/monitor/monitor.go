@@ -159,107 +159,152 @@ func (This *MonitorMgr) LogMonitorRealTime(cfg config.MonitorConfig, lineChan ch
 	}
 }
 
+// 엔진 재기동시 이어서 체킹하도록 만들어야 할꺼같은데 어떻게 할지 고려가 필요함
 func (This *MonitorMgr) LogMonitorSchedule(cfgMap map[time.Time]config.MonitorConfig, lineChanSch chan<- manager.LogLine) {
 	fmt.Println("Starting scheduled log monitor. It will check files periodically.")
 
-	//last line
 	fileOffsets := make(map[string]int64)
+	var mu sync.Mutex
 
 	for {
 		currentTime := time.Now()
 
+		tasksToProcess := make(map[time.Time]config.MonitorConfig)
+		mu.Lock()
+		for schTime, monCfg := range cfgMap {
+			if currentTime.After(schTime) || currentTime.Equal(schTime) {
+				tasksToProcess[schTime] = monCfg
+			}
+		}
+		mu.Unlock()
+
+		if len(tasksToProcess) == 0 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		var wg sync.WaitGroup
 		tasksToReschedule := make(map[time.Time]config.MonitorConfig)
 		tasksToRemove := []time.Time{}
 
-		for schTime, monCfg := range cfgMap {
-			if currentTime.After(schTime) || currentTime.Equal(schTime) {
-				fmt.Printf("--- Scheduled task ready for: %s (Scheduled at: %s) ---\n",
-					monCfg.Name, schTime.Format("2006-01-02 15:04:05"))
+		for schTime, monCfg := range tasksToProcess {
+			wg.Add(1)
 
-				filePath := filepath.Join(monCfg.Path, monCfg.FilenamePattern)
+			go func(schTime time.Time, monCfg config.MonitorConfig) {
+				defer wg.Done()
+				This.processMonitorTask(monCfg, schTime, fileOffsets, &mu, lineChanSch)
 
-				currentOffset, exists := fileOffsets[filePath]
-				if !exists {
-					currentOffset = 0
-				}
-
-				file, err := os.OpenFile(filePath, os.O_RDONLY, 0660)
-				if err != nil {
-					fmt.Printf("[%s] Scheduled file open err: %v\n", monCfg.Name, err)
-					// 파일오픈 실패시 고려할게 필요함
-					continue
-				}
-
-				_, err = file.Seek(currentOffset, io.SeekStart)
-				if err != nil {
-					fmt.Printf("[%s] Scheduled file seek error to offset %d: %v\n", monCfg.Name, currentOffset, err)
-					file.Close()
-					continue
-				}
-
-				reader := bufio.NewReader(file)
-				newOffset := currentOffset
-
-				// 파일사이즈 변동시 처리 로직
-				fileStat, statErr := file.Stat()
-				if statErr != nil {
-					fmt.Printf("[%s] Error getting file stat for %s: %v\n", monCfg.Name, filePath, statErr)
-					file.Close()
-					continue
-				}
-
-				// 파일 변동시 처리 로직
-				if newOffset > fileStat.Size() {
-					fmt.Printf("  [%s] File %s truncated or recreated. Resetting offset from %d to 0.\n", monCfg.Name, filePath, newOffset)
-					newOffset = 0                               // 오프셋 리셋
-					_, err = file.Seek(newOffset, io.SeekStart) // 다시 처음부터 시크
-					if err != nil {
-						fmt.Printf("[%s] File seek error after reset: %v\n", monCfg.Name, err)
-						file.Close()
-						continue
-					}
-					reader = bufio.NewReader(file)
-				}
-
-				for {
-					line, err := reader.ReadString('\n')
-					if err != nil {
-						if err == io.EOF {
-							break
-						}
-						fmt.Printf("[%s] Scheduled file read error: %v\n", monCfg.Name, err)
-						break
-					}
-
-					lineChanSch <- manager.LogLine{
-						MonitorName: monCfg.Name,
-						Content:     line,
-						Timestamp:   time.Now(),
-					}
-					newOffset += int64(len(line))
-				}
-				file.Close()
-
-				//update offset
-				fileOffsets[filePath] = newOffset
-
-				//update sch time
 				nextScheduledTime := time.Now().Add(time.Duration(monCfg.FileCheckTime) * time.Second)
-				tasksToReschedule[nextScheduledTime] = monCfg
-				tasksToRemove = append(tasksToRemove, schTime) // 처리된 파일 update
 
-				fmt.Printf("  [%s] Task completed. Next scheduled at: %s (New offset: %d)\n",
-					monCfg.Name, nextScheduledTime.Format("2006-01-02 15:04:05"), newOffset)
-			}
+				mu.Lock()
+				tasksToReschedule[nextScheduledTime] = monCfg
+				tasksToRemove = append(tasksToRemove, schTime)
+				mu.Unlock()
+
+				fmt.Printf("  [%s] Next scheduled at: %s\n",
+					monCfg.Name, nextScheduledTime.Format("2006-01-02 15:04:05"))
+
+			}(schTime, monCfg)
 		}
 
+		wg.Wait()
+
+		mu.Lock()
 		for _, oldSchTime := range tasksToRemove {
 			delete(cfgMap, oldSchTime)
 		}
 		for newSchTime, newMonCfg := range tasksToReschedule {
 			cfgMap[newSchTime] = newMonCfg
 		}
+		mu.Unlock()
 
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+func (This *MonitorMgr) processMonitorTask(
+	monCfg config.MonitorConfig,
+	schTime time.Time,
+	fileOffsets map[string]int64,
+	mu *sync.Mutex,
+	lineChanSch chan<- manager.LogLine,
+) {
+
+	//exception
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic in monitor task [%s]: %v\n", monCfg.Name, r)
+		}
+	}()
+
+	fmt.Printf("--- Scheduled task ready for: %s (Scheduled at: %s) ---\n",
+		monCfg.Name, schTime.Format("2006-01-02 15:04:05"))
+
+	filePath := filepath.Join(monCfg.Path, monCfg.FilenamePattern)
+
+	// fileOffsets mutex
+	mu.Lock()
+	currentOffset, exists := fileOffsets[filePath]
+	if !exists {
+		currentOffset = 0
+	}
+	mu.Unlock()
+
+	file, err := os.OpenFile(filePath, os.O_RDONLY, 0660)
+	if err != nil {
+		fmt.Printf("[%s] Scheduled file open err: %v\n", monCfg.Name, err)
+		return
+	}
+	defer file.Close()
+
+	_, err = file.Seek(currentOffset, io.SeekStart)
+	if err != nil {
+		fmt.Printf("[%s] Scheduled file seek error to offset %d: %v\n", monCfg.Name, currentOffset, err)
+		return
+	}
+
+	reader := bufio.NewReader(file)
+	newOffset := currentOffset
+
+	// 파일 크기 변경 시 처리 로직
+	fileStat, statErr := file.Stat()
+	if statErr != nil {
+		fmt.Printf("[%s] Error getting file stat for %s: %v\n", monCfg.Name, filePath, statErr)
+		return
+	}
+
+	if newOffset > fileStat.Size() {
+		fmt.Printf("  [%s] File %s truncated or recreated. Resetting offset from %d to 0.\n", monCfg.Name, filePath, newOffset)
+		newOffset = 0
+		_, err = file.Seek(newOffset, io.SeekStart)
+		if err != nil {
+			fmt.Printf("[%s] File seek error after reset: %v\n", monCfg.Name, err)
+			return
+		}
+		reader = bufio.NewReader(file)
+	}
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Printf("[%s] Scheduled file read error: %v\n", monCfg.Name, err)
+			break
+		}
+
+		lineChanSch <- manager.LogLine{
+			MonitorName: monCfg.Name,
+			Content:     line,
+			Timestamp:   time.Now(),
+		}
+		newOffset += int64(len(line))
+	}
+
+	mu.Lock()
+	fileOffsets[filePath] = newOffset
+	mu.Unlock()
+
+	fmt.Printf("  [%s] Task completed. (New offset: %d)\n", monCfg.Name, newOffset)
 }
